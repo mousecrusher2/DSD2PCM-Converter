@@ -87,7 +87,7 @@ class ConversionController(QtCore.QObject):
             pcm_samplerate=fs_pcm,
             stopband_hz=stopband_hz,
             stopband_atten_db=atten_db,
-            max_workers=max((os.cpu_count() // max_workers), 1),
+            max_workers=max((os.cpu_count() or 1) // max_workers, 1),
         )
 
         self._executor = concurrent.futures.ThreadPoolExecutor(

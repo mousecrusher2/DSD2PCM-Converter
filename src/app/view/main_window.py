@@ -36,15 +36,29 @@ class MainWindow(QtWidgets.QMainWindow):
             ["入力ファイル", "出力ファイル", "DSD Fs [Hz]", "Ch", "ステータス", "進捗"]
         )
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
-        header.setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
-        header.setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(3, QtWidgets.QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(4, QtWidgets.QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(5, QtWidgets.QHeaderView.ResizeToContents)
-        self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
-        self.table.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
-        self.table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(
+            2, QtWidgets.QHeaderView.ResizeMode.ResizeToContents
+        )
+        header.setSectionResizeMode(
+            3, QtWidgets.QHeaderView.ResizeMode.ResizeToContents
+        )
+        header.setSectionResizeMode(
+            4, QtWidgets.QHeaderView.ResizeMode.ResizeToContents
+        )
+        header.setSectionResizeMode(
+            5, QtWidgets.QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.table.setSelectionBehavior(
+            QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.table.setSelectionMode(
+            QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection
+        )
+        self.table.setEditTriggers(
+            QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers
+        )
 
         # 出力ディレクトリ
         self.output_dir_edit = QtWidgets.QLineEdit()
@@ -241,7 +255,7 @@ class MainWindow(QtWidgets.QMainWindow):
         bar.setRange(0, 100)
         bar.setValue(0)
         bar.setTextVisible(False)
-        self.table.setCellWidget(row, 5, bar)
+        self.table.setCellWidget(self.table.rowCount(), 5, bar)
 
     def _on_remove_files_clicked(self) -> None:
         rows = self.get_selected_rows()

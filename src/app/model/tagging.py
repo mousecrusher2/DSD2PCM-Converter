@@ -4,10 +4,10 @@ from pathlib import Path
 
 from mutagen.dsf import DSF
 from mutagen.flac import FLAC, Picture
-from mutagen.id3 import ID3Tags
+from mutagen.id3 import ID3
 
 
-def _copy_text_frames(id3: ID3Tags, flac: FLAC) -> None:
+def _copy_text_frames(id3: ID3, flac: FLAC) -> None:
     """代表的なテキストフレームを FLAC の Vorbis コメントにコピーする。"""
     if id3 is None:
         return
@@ -49,7 +49,7 @@ def _copy_text_frames(id3: ID3Tags, flac: FLAC) -> None:
             flac["COMMENT"] = comments
 
 
-def _copy_pictures(id3: ID3Tags, flac: FLAC) -> None:
+def _copy_pictures(id3: ID3, flac: FLAC) -> None:
     """APIC (Attached Picture) を FLAC の Picture ブロックにコピーする。"""
     if id3 is None:
         return
