@@ -8,4 +8,5 @@
         "args": ["-NoExit", "-Command", "./.venv/Scripts/activate"],
         }
     },
+    "python.analysis.typeCheckingMode": "standard",
 }
