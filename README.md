@@ -1,8 +1,17 @@
 # DSD2PCM-Converter
 DSD2PCM-Converter
 
-Cythonビルド：
-python setup_native_fir.py build_ext --inplace
+cythonからrustにして3倍くらい速くなった。
 
-Nuitkaビルド：
-python -m nuitka --standalone --windows-disable-console --enable-plugin=pyside6 --output-dir=dist --python-flag=-m src/app
+ライブラリのインストール
+
+```pwsh
+uv sync --frozen
+.\.venv\Scripts\activate
+```
+
+rustビルド
+
+```pwsh
+maturin develop --release
+```
