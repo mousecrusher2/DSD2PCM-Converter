@@ -4,6 +4,9 @@ use std::io;
 use std::path::PathBuf;
 
 fn main() {
+    // Force build.rs to run every time to ensure DLL copy happens
+    println!("cargo:rerun-if-changed=build_always_trigger");
+
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
     if target_os != "windows" {
         println!("cargo:rustc-link-lib=openblas");
@@ -63,34 +66,13 @@ fn main() {
         }
     }
 
-    // Copy to site-packages for maturin develop
-    // This is a best-effort attempt to place the DLL where Python can find it
-    if let Ok(output) = std::process::Command::new("python")
-        .args([
-            "-c",
-            "import sysconfig; print(sysconfig.get_path('purelib'))",
-        ])
-        .output()
-        && output.status.success()
-    {
-        let site_packages_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        let site_packages = PathBuf::from(site_packages_str);
-        let package_dir = site_packages.join("fir_decimator");
-
-        // Ensure directory exists
-        if !package_dir.exists() {
-            let _ = fs::create_dir_all(&package_dir);
-        }
-
-        if package_dir.exists() {
-            let dest = package_dir.join(dll_name);
-            match fs::copy(&dll_source, &dest) {
-                Ok(_) => println!(
-                    "cargo:warning=Copied {} to site-packages/fir_decimator",
-                    dll_name
-                ),
-                Err(e) => println!("cargo:warning=Failed to copy to site-packages: {}", e),
-            }
+    // Copy DLL to project root for maturin to include it
+    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    let dest_root = manifest_dir.join(dll_name);
+    if dll_source.exists() {
+        match fs::copy(&dll_source, &dest_root) {
+            Ok(_) => println!("cargo:warning=Copied {} to project root", dll_name),
+            Err(e) => println!("cargo:warning=Failed to copy to project root: {}", e),
         }
     }
 }

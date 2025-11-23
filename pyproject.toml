@@ -50,3 +50,6 @@ ignore = ["RUF003", "RUF002", "S110", "N806", "COM812"]
 
 [tool.ruff.format]
 docstring-code-format = true
+
+[tool.maturin]
+include = ["libopenblas.dll"]
