@@ -50,7 +50,7 @@ wheels = [
 [[package]]
 name = "dsd2pcm-converter"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "mutagen" },
     { name = "numpy" },

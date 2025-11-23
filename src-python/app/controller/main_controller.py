@@ -4,11 +4,10 @@ import concurrent.futures
 import os
 from pathlib import Path
 
+from model.converter import ConversionResult, ConversionSettings, convert_dsf_to_flac
+from model.dsf_reader import DsfReader
 from PySide6 import QtCore
-
-from ..model.converter import ConversionResult, ConversionSettings, convert_dsf_to_flac
-from ..model.dsf_reader import DsfReader
-from ..view.main_window import MainWindow
+from view.main_window import MainWindow
 
 
 class ConversionController(QtCore.QObject):

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
@@ -35,6 +36,7 @@ def convert_dsf_to_flac(
     settings: ConversionSettings,
     progress_cb: Callable[[float], None] | None = None,
 ) -> ConversionResult:
+    start_time = time.time()
     src = Path(src_path)
     try:
         if not src.exists():
@@ -43,9 +45,20 @@ def convert_dsf_to_flac(
         out_dir = settings.output_dir
         out_dir.mkdir(parents=True, exist_ok=True)
         dst = out_dir / (src.stem + ".flac")
+        fs_pcm = int(settings.pcm_samplerate)
 
-        reader = DsfReader(src)
-        try:
+        with (
+            DsfReader(src) as reader,
+            sf.SoundFile(
+                dst,
+                mode="w",
+                samplerate=fs_pcm,
+                channels=reader.channels,
+                format="FLAC",
+                subtype="PCM_24",
+            ) as out_f,
+            ThreadPoolExecutor(max_workers=settings.max_workers) as executor,
+        ):
             fs_dsd = reader.sample_rate
             channels = reader.channels
             total_samples = reader.sample_count
@@ -53,7 +66,6 @@ def convert_dsf_to_flac(
             if progress_cb is not None:
                 progress_cb(0.0)
 
-            fs_pcm = int(settings.pcm_samplerate)
             if fs_pcm <= 0:
                 return ConversionResult(
                     False, src, None, "PCM sample rate must be positive."
@@ -103,155 +115,141 @@ def convert_dsf_to_flac(
             if chunk_dsd_samples <= overlap:
                 chunk_dsd_samples = overlap * 2
 
-            with (
-                sf.SoundFile(
-                    dst,
-                    mode="w",
-                    samplerate=fs_pcm,
-                    channels=channels,
-                    format="FLAC",
-                    subtype="PCM_24",
-                ) as out_f,
-                ThreadPoolExecutor(max_workers=settings.max_workers) as executor,
-            ):
-                # 直前までの末尾 overlap サンプル（float32）
-                tail = np.zeros((overlap, channels), dtype=np.float32)
+            # 直前までの末尾 overlap サンプル（float32）
+            tail = np.zeros((overlap, channels), dtype=np.float32)
 
-                # グローバル DSD インデックス
-                global_index = 0
+            # グローバル DSD インデックス
+            global_index = 0
 
-                agg_blocks: list[np.ndarray] = []
-                agg_count = 0
+            agg_blocks: list[np.ndarray] = []
+            agg_count = 0
 
-                # 進捗表示用
-                processed_samples = 0  # 変換完了したDSD サンプル数（per channel）
+            # 進捗表示用
+            processed_samples = 0  # 変換完了したDSD サンプル数（per channel）
 
-                # チャンク ID と書き出し順管理
-                next_chunk_id = 0  # 次に submit するチャンクの ID
-                next_write_id = 0  # 次に out_f に書き出すべきチャンク ID
-                pending: dict[int, Future[np.ndarray]] = {}
+            # チャンク ID と書き出し順管理
+            next_chunk_id = 0  # 次に submit するチャンクの ID
+            next_write_id = 0  # 次に out_f に書き出すべきチャンク ID
+            pending: dict[int, Future[np.ndarray]] = {}
 
-                def submit_chunk(
-                    main: np.ndarray, tail_arr: np.ndarray, g_start: int
-                ) -> None:
-                    nonlocal next_chunk_id
-                    chunk_id = next_chunk_id
-                    next_chunk_id += 1
+            def submit_chunk(
+                main: np.ndarray, tail_arr: np.ndarray, g_start: int
+            ) -> None:
+                nonlocal next_chunk_id
+                chunk_id = next_chunk_id
+                next_chunk_id += 1
 
-                    # [tail; main] を作成
-                    dsd_ext = np.concatenate([tail_arr, main], axis=0).astype(
-                        np.float32, copy=False
-                    )
+                # [tail; main] を作成
+                dsd_ext = np.concatenate([tail_arr, main], axis=0).astype(
+                    np.float32, copy=False
+                )
 
-                    fut: Future[np.ndarray] = executor.submit(
-                        fir_decimate_chunk_stateless,
-                        dsd_ext,
-                        taps,
-                        decim,
-                        g_start,
-                        overlap,
-                    )
-                    pending[chunk_id] = fut
+                fut: Future[np.ndarray] = executor.submit(
+                    fir_decimate_chunk_stateless,
+                    dsd_ext,
+                    taps,
+                    decim,
+                    g_start,
+                    overlap,
+                )
+                pending[chunk_id] = fut
 
-                def drain_completed(block: bool = False) -> None:
-                    """
-                    chunk_id の昇順で、完了済みのチャンクを out_f に書き出す。
+            def drain_completed(block: bool = False) -> None:
+                """
+                chunk_id の昇順で、完了済みのチャンクを out_f に書き出す。
 
-                    block=False: すぐ終わらないものは飛ばす（軽く流す）
-                    block=True : next_write_id が完了するまで（または pending が空になるまで）待つ
-                    """
-                    nonlocal next_write_id
+                block=False: すぐ終わらないものは飛ばす（軽く流す）
+                block=True : next_write_id が完了するまで（または pending が空になるまで）待つ
+                """
+                nonlocal next_write_id
 
-                    while True:
-                        fut = pending.get(next_write_id)
-                        if fut is None:
+                while True:
+                    fut = pending.get(next_write_id)
+                    if fut is None:
+                        return
+
+                    if not fut.done():
+                        if not block:
                             return
+                        # block=True の場合はここで待つ
+                        pcm_block = fut.result()
+                    else:
+                        pcm_block = fut.result()
 
-                        if not fut.done():
-                            if not block:
-                                return
-                            # block=True の場合はここで待つ
-                            pcm_block = fut.result()
-                        else:
-                            pcm_block = fut.result()
+                    if pcm_block.size != 0:
+                        out_f.write(pcm_block)
 
-                        if pcm_block.size != 0:
-                            out_f.write(pcm_block)
+                    del pending[next_write_id]
+                    next_write_id += 1
 
-                        del pending[next_write_id]
-                        next_write_id += 1
+            # DSD ブロックを読みながらチャンク分割して、その場で FIR+decimate する
+            for blk in reader.iter_blocks():
+                if blk.size == 0:
+                    continue
+                if blk.dtype != np.float32:
+                    blk = blk.astype(np.float32, copy=False)
 
-                # DSD ブロックを読みながらチャンク分割して、その場で FIR+decimate する
-                for blk in reader.iter_blocks():
-                    if blk.size == 0:
-                        continue
-                    if blk.dtype != np.float32:
-                        blk = blk.astype(np.float32, copy=False)
+                # 「読み終わった DSD サンプル数」を加算（進捗表示用）
+                processed_samples += blk.shape[0]
+                if progress_cb is not None and total_samples > 0:
+                    frac = min(processed_samples / float(total_samples), 0.9999)
+                    progress_cb(frac)
 
-                    # 「読み終わった DSD サンプル数」を加算（進捗表示用）
-                    processed_samples += blk.shape[0]
-                    if progress_cb is not None and total_samples > 0:
-                        frac = min(processed_samples / float(total_samples), 0.9999)
-                        progress_cb(frac)
+                agg_blocks.append(blk)
+                agg_count += blk.shape[0]
 
-                    agg_blocks.append(blk)
-                    agg_count += blk.shape[0]
-
-                    # まとめた DSD サンプル数がチャンクしきい値を超えたら処理
-                    while agg_count >= chunk_dsd_samples:
-                        # チャンク本体を取り出す
-                        big = np.concatenate(agg_blocks, axis=0)
-                        main = big[:chunk_dsd_samples, :]
-                        rest = big[chunk_dsd_samples:, :]
-
-                        agg_blocks = [rest] if rest.size > 0 else []
-                        agg_count = rest.shape[0] if rest.size > 0 else 0
-
-                        # このチャンクをスレッドプールに投げる
-                        submit_chunk(main, tail, global_index)
-
-                        # tail 更新（次チャンク用）: ここは入力 DSD だけで決まるので
-                        # 計算結果は待たなくてよい
-                        concat_for_tail = np.concatenate([tail, main], axis=0)
-                        if concat_for_tail.shape[0] >= overlap:
-                            tail = concat_for_tail[-overlap:, :].astype(
-                                np.float32, copy=False
-                            )
-                        else:
-                            pad = overlap - concat_for_tail.shape[0]
-                            new_tail = np.zeros((overlap, channels), dtype=np.float32)
-                            new_tail[pad:, :] = concat_for_tail.astype(
-                                np.float32, copy=False
-                            )
-                            tail = new_tail
-
-                        global_index += main.shape[0]
-
-                        # 溜めすぎ防止: pending が多くなったら少し捌く
-                        if len(pending) >= 2 * (settings.max_workers):
-                            drain_completed(block=True)  # 少なくとも一つは書き出す
-
-                        else:
-                            # 軽く流す（完了済みがあれば書き出す）
-                            drain_completed(block=False)
-
-                # 余りチャンクがあれば最後に処理（これもスレッドプールに投げる）
-                if agg_count > 0:
+                # まとめた DSD サンプル数がチャンクしきい値を超えたら処理
+                while agg_count >= chunk_dsd_samples:
+                    # チャンク本体を取り出す
                     big = np.concatenate(agg_blocks, axis=0)
-                    main = big.astype(np.float32, copy=False)
+                    main = big[:chunk_dsd_samples, :]
+                    rest = big[chunk_dsd_samples:, :]
 
+                    agg_blocks = [rest] if rest.size > 0 else []
+                    agg_count = rest.shape[0] if rest.size > 0 else 0
+
+                    # このチャンクをスレッドプールに投げる
                     submit_chunk(main, tail, global_index)
 
-                # すべての DSD を処理し終わったので、最終進捗を 1.0 に
-                if progress_cb is not None:
-                    progress_cb(1.0)
+                    # tail 更新（次チャンク用）: ここは入力 DSD だけで決まるので
+                    # 計算結果は待たなくてよい
+                    concat_for_tail = np.concatenate([tail, main], axis=0)
+                    if concat_for_tail.shape[0] >= overlap:
+                        tail = concat_for_tail[-overlap:, :].astype(
+                            np.float32, copy=False
+                        )
+                    else:
+                        pad = overlap - concat_for_tail.shape[0]
+                        new_tail = np.zeros((overlap, channels), dtype=np.float32)
+                        new_tail[pad:, :] = concat_for_tail.astype(
+                            np.float32, copy=False
+                        )
+                        tail = new_tail
 
-                # すべてのチャンクが終わるまで待って順番に書き出す
-                drain_completed(block=True)
-                # （executor は with ブロックを抜けると自動で shutdown(wait=True)）
+                    global_index += main.shape[0]
 
-        finally:
-            reader.close()
+                    # 溜めすぎ防止: pending が多くなったら少し捌く
+                    if len(pending) >= 2 * (settings.max_workers):
+                        drain_completed(block=True)  # 少なくとも一つは書き出す
+
+                    else:
+                        # 軽く流す（完了済みがあれば書き出す）
+                        drain_completed(block=False)
+
+            # 余りチャンクがあれば最後に処理（これもスレッドプールに投げる）
+            if agg_count > 0:
+                big = np.concatenate(agg_blocks, axis=0)
+                main = big.astype(np.float32, copy=False)
+
+                submit_chunk(main, tail, global_index)
+
+            # すべての DSD を処理し終わったので、最終進捗を 1.0 に
+            if progress_cb is not None:
+                progress_cb(1.0)
+
+            # すべてのチャンクが終わるまで待って順番に書き出す
+            drain_completed(block=True)
+            # （executor は with ブロックを抜けると自動で shutdown(wait=True)）
 
         # タグコピー
         try:
@@ -268,3 +266,7 @@ def convert_dsf_to_flac(
 
     except Exception as exc:
         return ConversionResult(False, src, None, f"Error: {exc}")
+    finally:
+        end_time = time.time()
+        elapsed = end_time - start_time
+        print(f"Conversion of {src} took {elapsed:.2f} seconds.")

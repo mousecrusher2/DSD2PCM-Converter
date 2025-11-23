@@ -3,8 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-
-from ..native_fir.fir_decimator import (
+from native_fir.fir_decimator import (
     fir_decimate_chunk_core as _fir_decimate_chunk_core,
 )
 

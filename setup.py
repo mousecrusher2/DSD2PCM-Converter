@@ -6,7 +6,7 @@ from Cython.Build import cythonize
 from setuptools import Extension, setup
 
 ROOT = Path(__file__).resolve().parent
-SRC_DIR = ROOT / "src"
+SRC_DIR = ROOT / "src-python"
 
 extra_compile_args = []
 extra_link_args = []
