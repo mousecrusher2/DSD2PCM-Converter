@@ -20,14 +20,6 @@ dev = [
   "types-setuptools>=80.9.0.20250822",
 ]
 
-[tool.mypy]
-strict = true
-disallow_untyped_calls = false
-
-[[tool.mypy.overrides]]
-module = "soundfile"
-ignore_missing_imports = true
-
 [tool.ruff.lint]
 extend-select = [
   "UP",

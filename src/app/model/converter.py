@@ -1,13 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
-import os
 
 import numpy as np
 import soundfile as sf
-from typing import Callable, Optional
-from concurrent.futures import ThreadPoolExecutor, Future
 
 from .dsf_reader import DsfReader
 from .dsp import design_kaiser_lowpass, fir_decimate_chunk_stateless
@@ -20,7 +19,7 @@ class ConversionSettings:
     pcm_samplerate: int
     stopband_hz: float
     stopband_atten_db: float
-    max_workers : int
+    max_workers: int
 
 
 @dataclass(frozen=True)
@@ -56,7 +55,9 @@ def convert_dsf_to_flac(
 
             fs_pcm = int(settings.pcm_samplerate)
             if fs_pcm <= 0:
-                return ConversionResult(False, src, None, "PCM sample rate must be positive.")
+                return ConversionResult(
+                    False, src, None, "PCM sample rate must be positive."
+                )
 
             if fs_dsd % fs_pcm != 0:
                 msg = (
@@ -80,7 +81,9 @@ def convert_dsf_to_flac(
             )
             L = len(taps)
             if L < 2:
-                return ConversionResult(False, src, None, "FIR taps length is too short.")
+                return ConversionResult(
+                    False, src, None, "FIR taps length is too short."
+                )
 
             overlap = L - 1
 
@@ -91,7 +94,7 @@ def convert_dsf_to_flac(
             #     32MB を超えないように制限
             # -----------------------------
             target_chunk_bytes = 32 * 1024 * 1024  # 32MB くらいを目安
-            bytes_per_sample = 4 * channels       # float32 × channels
+            bytes_per_sample = 4 * channels  # float32 × channels
 
             chunk_dsd_samples_time = int(fs_dsd * 0.5)  # 0.5 秒
             chunk_dsd_samples_mem = target_chunk_bytes // bytes_per_sample
@@ -100,17 +103,17 @@ def convert_dsf_to_flac(
             if chunk_dsd_samples <= overlap:
                 chunk_dsd_samples = overlap * 2
 
-            with sf.SoundFile(
-                dst,
-                mode="w",
-                samplerate=fs_pcm,
-                channels=channels,
-                format="FLAC",
-                subtype="PCM_24",
-            ) as out_f, ThreadPoolExecutor(
-                max_workers= settings.max_workers
-            ) as executor:
-
+            with (
+                sf.SoundFile(
+                    dst,
+                    mode="w",
+                    samplerate=fs_pcm,
+                    channels=channels,
+                    format="FLAC",
+                    subtype="PCM_24",
+                ) as out_f,
+                ThreadPoolExecutor(max_workers=settings.max_workers) as executor,
+            ):
                 # 直前までの末尾 overlap サンプル（float32）
                 tail = np.zeros((overlap, channels), dtype=np.float32)
 
@@ -124,11 +127,13 @@ def convert_dsf_to_flac(
                 processed_samples = 0  # 変換完了したDSD サンプル数（per channel）
 
                 # チャンク ID と書き出し順管理
-                next_chunk_id = 0       # 次に submit するチャンクの ID
-                next_write_id = 0       # 次に out_f に書き出すべきチャンク ID
+                next_chunk_id = 0  # 次に submit するチャンクの ID
+                next_write_id = 0  # 次に out_f に書き出すべきチャンク ID
                 pending: dict[int, Future[np.ndarray]] = {}
 
-                def submit_chunk(main: np.ndarray, tail_arr: np.ndarray, g_start: int) -> None:
+                def submit_chunk(
+                    main: np.ndarray, tail_arr: np.ndarray, g_start: int
+                ) -> None:
                     nonlocal next_chunk_id
                     chunk_id = next_chunk_id
                     next_chunk_id += 1
@@ -209,11 +214,15 @@ def convert_dsf_to_flac(
                         # 計算結果は待たなくてよい
                         concat_for_tail = np.concatenate([tail, main], axis=0)
                         if concat_for_tail.shape[0] >= overlap:
-                            tail = concat_for_tail[-overlap:, :].astype(np.float32, copy=False)
+                            tail = concat_for_tail[-overlap:, :].astype(
+                                np.float32, copy=False
+                            )
                         else:
                             pad = overlap - concat_for_tail.shape[0]
                             new_tail = np.zeros((overlap, channels), dtype=np.float32)
-                            new_tail[pad:, :] = concat_for_tail.astype(np.float32, copy=False)
+                            new_tail[pad:, :] = concat_for_tail.astype(
+                                np.float32, copy=False
+                            )
                             tail = new_tail
 
                         global_index += main.shape[0]
@@ -232,7 +241,7 @@ def convert_dsf_to_flac(
                     main = big.astype(np.float32, copy=False)
 
                     submit_chunk(main, tail, global_index)
-                
+
                 # すべての DSD を処理し終わったので、最終進捗を 1.0 に
                 if progress_cb is not None:
                     progress_cb(1.0)
@@ -247,7 +256,7 @@ def convert_dsf_to_flac(
         # タグコピー
         try:
             copy_tags_dsf_to_flac(src, dst)
-        except Exception as tag_exc:  # noqa: BLE001
+        except Exception as tag_exc:
             return ConversionResult(
                 True,
                 src,
@@ -257,5 +266,5 @@ def convert_dsf_to_flac(
 
         return ConversionResult(True, src, dst, "OK")
 
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return ConversionResult(False, src, None, f"Error: {exc}")

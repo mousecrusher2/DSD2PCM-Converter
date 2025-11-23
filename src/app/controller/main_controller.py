@@ -1,28 +1,29 @@
 from __future__ import annotations
 
+import concurrent.futures
 import os
 from pathlib import Path
-from typing import Dict
 
 from PySide6 import QtCore
 
-from ..model.converter import ConversionSettings, ConversionResult, convert_dsf_to_flac
+from ..model.converter import ConversionResult, ConversionSettings, convert_dsf_to_flac
 from ..model.dsf_reader import DsfReader
 from ..view.main_window import MainWindow
-
-import concurrent.futures
 
 
 class ConversionController(QtCore.QObject):
     """GUI と変換ロジックをつなぐ Controller。"""
+
     progress_changed = QtCore.Signal(int, float)  # row, progress(0.0〜1.0)
 
-    def __init__(self, window: MainWindow, parent: QtCore.QObject | None = None) -> None:
+    def __init__(
+        self, window: MainWindow, parent: QtCore.QObject | None = None
+    ) -> None:
         super().__init__(parent)
         self.window = window
 
         self._executor: concurrent.futures.Executor | None = None
-        self._futures: Dict[concurrent.futures.Future, int] = {}
+        self._futures: dict[concurrent.futures.Future, int] = {}
         self._poll_timer = QtCore.QTimer(self)
         self._poll_timer.setInterval(200)
         self._poll_timer.timeout.connect(self._poll_futures)
@@ -38,7 +39,7 @@ class ConversionController(QtCore.QObject):
         self.progress_changed.connect(self._on_progress_changed)
 
     # ------------------------------------------------------------------ #
-    def _on_rows_inserted(self, parent_index, start: int, end: int) -> None:  # noqa: ANN001
+    def _on_rows_inserted(self, _parent_index, start: int, end: int) -> None:
         # 追加された行について DSF ヘッダを読んで Fs / Ch を表示
         for row in range(start, end + 1):
             item = self.window.table.item(row, 0)
@@ -49,8 +50,10 @@ class ConversionController(QtCore.QObject):
                 continue
             try:
                 with DsfReader(path) as reader:
-                    self.window.set_row_dsd_info(row, reader.sample_rate, reader.channels)
-            except Exception as exc:  # noqa: BLE001
+                    self.window.set_row_dsd_info(
+                        row, reader.sample_rate, reader.channels
+                    )
+            except Exception as exc:
                 self.window.append_log(f"[DSF解析エラー] {path}: {exc}")
                 self.window.set_row_status(row, "DSF解析エラー")
 
@@ -84,7 +87,7 @@ class ConversionController(QtCore.QObject):
             pcm_samplerate=fs_pcm,
             stopband_hz=stopband_hz,
             stopband_atten_db=atten_db,
-            max_workers = max((os.cpu_count() // max_workers) , 1),
+            max_workers=max((os.cpu_count() // max_workers), 1),
         )
 
         self._executor = concurrent.futures.ThreadPoolExecutor(
@@ -106,6 +109,7 @@ class ConversionController(QtCore.QObject):
             def make_progress_cb(row_index: int):
                 def _cb(frac: float) -> None:
                     self.progress_changed.emit(row_index, frac)
+
                 return _cb
 
             progress_cb = make_progress_cb(row)
@@ -152,7 +156,7 @@ class ConversionController(QtCore.QObject):
             row = self._futures.pop(fut)
             try:
                 result: ConversionResult = fut.result()
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 self.window.set_row_status(row, "エラー")
                 self.window.append_log(f"[変換エラー] 行 {row}: {exc}")
                 continue
@@ -181,7 +185,7 @@ class ConversionController(QtCore.QObject):
             self._executor = None
             self.window.set_conversion_running(False)
             self.window.append_log("すべての変換が完了しました。")
-    
+
     @QtCore.Slot(int, float)
     def _on_progress_changed(self, row: int, frac: float) -> None:
         # 0.0〜1.0 → 0〜100%

@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List
 
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtWidgets
 
 
 class MainWindow(QtWidgets.QMainWindow):
     """メインウィンドウ（MVC の View）。"""
 
-    def __init__(self, max_workers: int, parent: QtWidgets.QWidget | None = None) -> None:
+    def __init__(
+        self, max_workers: int, parent: QtWidgets.QWidget | None = None
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("DSD (DSF) -> PCM (FLAC) Converter")
 
@@ -172,8 +173,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 paths.append(Path(path_str))
         return paths
 
-    def get_selected_rows(self) -> List[int]:
-        rows = sorted(set(idx.row() for idx in self.table.selectedIndexes()))
+    def get_selected_rows(self) -> list[int]:
+        rows = sorted({idx.row() for idx in self.table.selectedIndexes()})
         return rows
 
     def set_row_status(self, row: int, status: str) -> None:

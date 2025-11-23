@@ -1,14 +1,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+
 import numpy as np
-from ..native_fir.fir_decimator import fir_decimate_chunk_core as _fir_decimate_chunk_core
+
+from ..native_fir.fir_decimator import (
+    fir_decimate_chunk_core as _fir_decimate_chunk_core,
+)
+
 
 @dataclass
 class FIRDecimatorState:
     """ストリーミング FIR decimation 用の per-channel 状態。"""
+
     prev_input: np.ndarray  # shape: (channels, taps-1)
-    phase: np.ndarray       # shape: (channels,), modulo decim factor
+    phase: np.ndarray  # shape: (channels,), modulo decim factor
+
 
 # dsp.py などのトップレベルに置く（Pickle 可能にするため）
 def fir_decimate_chunk_worker(
@@ -27,7 +34,10 @@ def fir_decimate_chunk_worker(
         overlap,
     )
 
-def create_fir_decimator_state(num_channels: int, num_taps: int, decim: int) -> FIRDecimatorState:
+
+def create_fir_decimator_state(
+    num_channels: int, num_taps: int, decim: int
+) -> FIRDecimatorState:
     if num_channels <= 0:
         raise ValueError("num_channels must be positive.")
     if num_taps <= 1:
@@ -38,6 +48,7 @@ def create_fir_decimator_state(num_channels: int, num_taps: int, decim: int) -> 
     prev_input = np.zeros((num_channels, num_taps - 1), dtype=np.float32)
     phase = np.zeros(num_channels, dtype=np.int64)
     return FIRDecimatorState(prev_input=prev_input, phase=phase)
+
 
 def design_kaiser_lowpass(
     fs: float,
@@ -113,18 +124,6 @@ def design_kaiser_lowpass(
     # DC 利得 = 1 に正規化
     h /= np.sum(h)
     return h.astype(np.float32)
-
-def create_fir_decimator_state(num_channels: int, num_taps: int, decim: int) -> FIRDecimatorState:
-    if num_channels <= 0:
-        raise ValueError("num_channels must be positive.")
-    if num_taps <= 1:
-        raise ValueError("num_taps must be > 1.")
-    if decim <= 0:
-        raise ValueError("decim must be positive.")
-
-    prev_input = np.zeros((num_channels, num_taps - 1), dtype=np.float32)
-    phase = np.zeros(num_channels, dtype=np.int64)
-    return FIRDecimatorState(prev_input=prev_input, phase=phase)
 
 
 def fir_decimate_chunk_stateless(
@@ -218,7 +217,7 @@ def process_dsd_in_chunks_stateless(
     tail = None  # shape = (overlap, ch)
 
     # ファイル全体に対するグローバル DSD インデックス
-    global_index = 0      # 次の main[0] のグローバルインデックス
+    global_index = 0  # 次の main[0] のグローバルインデックス
     tail = None
     agg_blocks = []
     agg_count = 0

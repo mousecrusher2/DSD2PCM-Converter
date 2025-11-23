@@ -13,16 +13,16 @@ def _copy_text_frames(id3: ID3Tags, flac: FLAC) -> None:
         return
 
     frame_map = {
-        "TIT2": "TITLE",        # Title/songname/content description
-        "TPE1": "ARTIST",       # Lead performer/soloist
+        "TIT2": "TITLE",  # Title/songname/content description
+        "TPE1": "ARTIST",  # Lead performer/soloist
         "TPE2": "ALBUMARTIST",  # Band/orchestra/accompaniment
-        "TALB": "ALBUM",        # Album title
-        "TCON": "GENRE",        # Genre
+        "TALB": "ALBUM",  # Album title
+        "TCON": "GENRE",  # Genre
         "TRCK": "TRACKNUMBER",  # Track number
-        "TPOS": "DISCNUMBER",   # Disc number
+        "TPOS": "DISCNUMBER",  # Disc number
         "TCOM": "COMPOSER",
-        "TDRC": "DATE",         # Recording time (v2.4)
-        "TYER": "DATE",         # Year (v2.3)
+        "TDRC": "DATE",  # Recording time (v2.4)
+        "TYER": "DATE",  # Year (v2.3)
     }
 
     for frame_id, flac_key in frame_map.items():

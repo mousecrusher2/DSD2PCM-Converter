@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import math
 import struct
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 import numpy as np
 
@@ -26,7 +26,7 @@ class DsfReader:
     def _read_exact(self, n: int) -> bytes:
         data = self._fh.read(n)
         if len(data) != n:
-            raise IOError("Unexpected end of file while reading DSF header.")
+            raise OSError("Unexpected end of file while reading DSF header.")
         return data
 
     @staticmethod
@@ -51,7 +51,7 @@ class DsfReader:
         if self._read_exact(4) != b"DSD ":
             raise ValueError(f"{self.path} is not a DSF file (missing 'DSD ' chunk).")
 
-        dsd_chunk_size = self._read_u64()
+        _dsd_chunk_size = self._read_u64()
         total_file_size = self._read_u64()
         metadata_ptr = self._read_u64()  # ID3v2 タグへのポインタ（0 の場合もあり）
 
@@ -60,19 +60,19 @@ class DsfReader:
             raise ValueError("Missing 'fmt ' chunk in DSF file.")
 
         fmt_chunk_size = self._read_u64()
-        fmt_version = self._read_u32()
-        fmt_id = self._read_u32()
-        channel_type = self._read_u32()
+        _fmt_version = self._read_u32()
+        _fmt_id = self._read_u32()
+        _channel_type = self._read_u32()
         channel_num = self._read_u32()
         sample_rate = self._read_u32()
         bits_per_sample = self._read_u32()
         sample_count = self._read_u64()  # per channel
         block_size_per_channel = self._read_u32()
-        reserved = self._read_u32()
+        _reserved = self._read_u32()
 
         # fmt chunk の残り
         bytes_consumed = (
-            4    # header
+            4  # header
             + 8  # chunk_size
             + 4  # fmt_version
             + 4  # fmt_id
@@ -109,7 +109,9 @@ class DsfReader:
         self.total_file_size = int(total_file_size)
 
         if self.bits_per_sample != 1:
-            raise NotImplementedError("Only 1-bit DSF (BitsPerSample == 1) is supported.")
+            raise NotImplementedError(
+                "Only 1-bit DSF (BitsPerSample == 1) is supported."
+            )
 
         if self.block_size_per_channel <= 0:
             raise ValueError("Invalid block size per channel in DSF file.")
@@ -122,8 +124,8 @@ class DsfReader:
 
         # 派生値
         self._bits_per_block_per_ch = self.block_size_per_channel * 8
-        self._blocks_total = int(
-            math.ceil(self.sample_count / float(self._bits_per_block_per_ch))
+        self._blocks_total = math.ceil(
+            self.sample_count / float(self._bits_per_block_per_ch)
         )
 
     # ------------------------------------------------------------------ #
@@ -144,7 +146,7 @@ class DsfReader:
             # 1 DSF ブロック（全チャネル分）読み出し
             raw = self._fh.read(bpc * ch)
             if len(raw) != bpc * ch:
-                raise IOError("Unexpected end of file while reading DSF sample data.")
+                raise OSError("Unexpected end of file while reading DSF sample data.")
 
             remaining = total_samples - samples_done
             samples_in_block = min(self._bits_per_block_per_ch, remaining)
@@ -171,7 +173,7 @@ class DsfReader:
         except Exception:
             pass
 
-    def __enter__(self) -> "DsfReader":
+    def __enter__(self) -> DsfReader:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
