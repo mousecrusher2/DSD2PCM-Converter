@@ -13,6 +13,7 @@ dependencies = [
   "numpy>=2.3.5",
   "pyside6>=6.10.1",
   "soundfile>=0.13.1",
+  "threadpoolctl>=3.6.0",
 ]
 
 [dependency-groups]

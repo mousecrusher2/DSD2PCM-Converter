@@ -10,9 +10,15 @@ crate-type = ["cdylib"]
 
 [dependencies]
 cblas = "0.5.0"
-# blas = "0.23.0"
-# intel-mkl-src = { version = "0.8.1", features = ["mkl-dynamic-lp64-seq"] }
-# blas-src = { version = "0.14", features = ["openblas"] }
 numpy = "0.27.0"
-openblas-src = { version = "0.10.13", features = ["system"] }
 pyo3 = { version = "0.27.0", features = ["extension-module"] }
+
+[build-dependencies]
+reqwest = { version = "0.12", features = ["blocking", "rustls-tls"] }
+zip = "6"
+
+[profile.release]
+debug = true
+strip = false
+lto = "thin"
+codegen-units = 1

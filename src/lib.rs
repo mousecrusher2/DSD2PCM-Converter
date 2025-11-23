@@ -19,6 +19,7 @@ mod fir_decimator {
         decim: usize,
         phase_init: usize,
         over_lap: usize,
+        main_len: usize,
     ) -> Bound<'py, PyArray2<f64>> {
         let dsd_ext = dsd_ext.as_array();
         let dsd_ext = dsd_ext
@@ -33,7 +34,7 @@ mod fir_decimator {
             .map(|&x| x as f64)
             .collect::<Vec<f64>>();
         let res = py
-            .detach(|| fir_decimate_chunk_core_inner(&dsd_ext, &taps, decim, phase_init, over_lap));
+            .detach(|| fir_decimate_chunk_core_inner(&dsd_ext, &taps, decim, phase_init, over_lap, main_len));
         res.into_pyarray(py)
     }
 
@@ -43,12 +44,15 @@ mod fir_decimator {
         decim: usize,
         phase_init: usize,
         over_lap: usize,
+        main_len: usize,
     ) -> Array2<f64> {
-        let n_ext = dsd_ext.len();
         let ch = dsd_ext.len();
+        if ch == 0 {
+            return Array2::zeros((0, 0));
+        }
+        let n_ext = dsd_ext[0].len();
         let l = taps.len();
 
-        let main_len = dsd_ext[0].len().saturating_sub(over_lap);
         let main_start = over_lap;
         let main_end = over_lap + main_len;
 

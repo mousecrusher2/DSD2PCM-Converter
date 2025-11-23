@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import numpy as np
 import fir_decimator
+import numpy as np
 
 
 @dataclass
@@ -174,7 +174,7 @@ def fir_decimate_chunk_stateless(
         int(decim),
         phase_init,
         int(overlap),
-        # int(main_len),
+        int(main_len),
     )
 
     # _fir_decimate_chunk_core は float64 を返す実装にしている想定

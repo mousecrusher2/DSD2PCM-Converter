@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import soundfile as sf
+from threadpoolctl import threadpool_limits
 
 from .dsf_reader import DsfReader
 from .dsp import design_kaiser_lowpass, fir_decimate_chunk_stateless
@@ -58,6 +59,7 @@ def convert_dsf_to_flac(
                 subtype="PCM_24",
             ) as out_f,
             ThreadPoolExecutor(max_workers=settings.max_workers) as executor,
+            threadpool_limits(limits=1, user_api="blas"),
         ):
             fs_dsd = reader.sample_rate
             channels = reader.channels
