@@ -1,0 +1,54 @@
+[project]
+name = "dsd2pcm-converter"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = "~=3.13.9"
+dependencies = [
+  "mutagen>=1.47.0",
+  "numpy>=2.3.5",
+  "pyside6>=6.10.1",
+  "soundfile>=0.13.1",
+]
+
+[dependency-groups]
+dev = [
+  "cython>=3.2.1",
+  "nuitka>=2.8.6",
+  "ruff>=0.14.6",
+  "setuptools>=80.9.0",
+  "types-setuptools>=80.9.0.20250822",
+]
+
+[tool.mypy]
+strict = true
+disallow_untyped_calls = false
+
+[[tool.mypy.overrides]]
+module = "soundfile"
+ignore_missing_imports = true
+
+[tool.ruff.lint]
+extend-select = [
+  "UP",
+  "YTT",
+  "ASYNC",
+  "S",
+  "B",
+  "A",
+  "COM",
+  "C4",
+  "ISC",
+  "PIE",
+  "PT",
+  "ARG",
+  "PTH",
+  "NPY",
+  "N",
+  "RUF",
+  "I",
+]
+ignore = ["RUF003", "RUF002", "S110", "N806", "COM812"]
+
+[tool.ruff.format]
+docstring-code-format = true

@@ -3,10 +3,9 @@ from __future__ import annotations
 import os
 import sys
 
+from controller.main_controller import ConversionController
 from PySide6 import QtWidgets
-
-from .controller.main_controller import ConversionController
-from .view.main_window import MainWindow
+from view.main_window import MainWindow
 
 
 def main() -> int:

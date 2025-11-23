@@ -1,9 +1,9 @@
-# setup_native_fir.py
-from setuptools import setup, Extension
-from Cython.Build import cythonize
-import numpy as np
 import sys
 from pathlib import Path
+
+import numpy as np
+from Cython.Build import cythonize
+from setuptools import Extension, setup
 
 ROOT = Path(__file__).resolve().parent
 SRC_DIR = ROOT / "src"
@@ -26,11 +26,14 @@ ext_modules = [
         include_dirs=[np.get_include()],
         extra_compile_args=extra_compile_args,
         extra_link_args=extra_link_args,
-    )
+    ),
 ]
+
+cwd = Path.cwd()
 
 setup(
     name="native_fir",
+    package_dir={cwd.name: ""},
     ext_modules=cythonize(
         ext_modules,
         annotate=False,
