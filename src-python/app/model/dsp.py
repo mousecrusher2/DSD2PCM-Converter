@@ -3,9 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from native_fir.fir_decimator import (
-    fir_decimate_chunk_core as _fir_decimate_chunk_core,
-)
+import fir_decimator
 
 
 @dataclass
@@ -170,13 +168,13 @@ def fir_decimate_chunk_stateless(
     phase_init = int(global_start_ext % decim)
 
     # Cython 実装を呼び出し
-    pcm = _fir_decimate_chunk_core(
+    pcm = fir_decimator.fir_decimate_chunk_core(
         dsd_ext32,
         taps32,
         int(decim),
         phase_init,
         int(overlap),
-        int(main_len),
+        # int(main_len),
     )
 
     # _fir_decimate_chunk_core は float64 を返す実装にしている想定

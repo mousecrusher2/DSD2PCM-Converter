@@ -5,7 +5,7 @@ use pyo3::prelude::*;
 mod fir_decimator {
     use cblas::ddot;
     use numpy::{
-        IntoPyArray as _, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2,
+        IntoPyArray as _, PyArray2, PyReadonlyArray1, PyReadonlyArray2,
         ndarray::{Array2, Axis},
     };
     use pyo3::prelude::*;
@@ -78,8 +78,8 @@ mod fir_decimator {
         for oi in 0..n_out {
             let i = first_i + oi * decim;
             for c in 0..ch {
-                let x = &dsd_ext[c][i.saturating_sub(l - 1)..=i];
-                let y = &taps[..x.len()];
+                let x = &dsd_ext[c][i - (l - 1)..=i];
+                let y = &taps;
                 out[[oi, c]] = dot(x, y);
             }
         }
