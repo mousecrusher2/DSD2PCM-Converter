@@ -66,13 +66,58 @@ fn main() {
         }
     }
 
-    // Copy DLL to project root for maturin to include it
+    // Copy DLL to project root for maturin to include it (for wheel build)
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let dest_root = manifest_dir.join(dll_name);
     if dll_source.exists() {
         match fs::copy(&dll_source, &dest_root) {
             Ok(_) => println!("cargo:warning=Copied {} to project root", dll_name),
             Err(e) => println!("cargo:warning=Failed to copy to project root: {}", e),
+        }
+    }
+
+    // Copy to site-packages for maturin develop (for local development)
+    // Try to determine site-packages from python command or VIRTUAL_ENV
+    let site_packages = if let Ok(output) = std::process::Command::new("python")
+        .args([
+            "-c",
+            "import sysconfig; print(sysconfig.get_path('purelib'))",
+        ])
+        .output()
+    {
+        if output.status.success() {
+            Some(PathBuf::from(
+                String::from_utf8_lossy(&output.stdout).trim(),
+            ))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let site_packages = site_packages.or_else(|| {
+        env::var("VIRTUAL_ENV").ok().map(|venv| {
+            PathBuf::from(venv).join("Lib").join("site-packages")
+        })
+    });
+
+    if let Some(site_packages) = site_packages {
+        let package_dir = site_packages.join("fir_decimator");
+        // Ensure directory exists (maturin might have created it, or not yet)
+        if !package_dir.exists() {
+            let _ = fs::create_dir_all(&package_dir);
+        }
+
+        if package_dir.exists() {
+            let dest = package_dir.join(dll_name);
+            match fs::copy(&dll_source, &dest) {
+                Ok(_) => println!(
+                    "cargo:warning=Copied {} to site-packages/fir_decimator",
+                    dll_name
+                ),
+                Err(e) => println!("cargo:warning=Failed to copy to site-packages: {}", e),
+            }
         }
     }
 }
