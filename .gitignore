@@ -211,3 +211,5 @@ __marimo__/
 
 # OpenBLAS DLL
 libopenblas.dll
+
+local-test/

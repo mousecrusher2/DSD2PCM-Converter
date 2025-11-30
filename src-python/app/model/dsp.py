@@ -1,50 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 import fir_decimator
 import numpy as np
-
-
-@dataclass
-class FIRDecimatorState:
-    """ストリーミング FIR decimation 用の per-channel 状態。"""
-
-    prev_input: np.ndarray  # shape: (channels, taps-1)
-    phase: np.ndarray  # shape: (channels,), modulo decim factor
-
-
-# dsp.py などのトップレベルに置く（Pickle 可能にするため）
-def fir_decimate_chunk_worker(
-    dsd_ext: np.ndarray,
-    taps: np.ndarray,
-    decim: int,
-    global_start_index: int,
-) -> np.ndarray:
-    L = len(taps)
-    overlap = L - 1
-    return fir_decimate_chunk_stateless(
-        dsd_ext,
-        taps,
-        decim,
-        global_start_index,
-        overlap,
-    )
-
-
-def create_fir_decimator_state(
-    num_channels: int, num_taps: int, decim: int
-) -> FIRDecimatorState:
-    if num_channels <= 0:
-        raise ValueError("num_channels must be positive.")
-    if num_taps <= 1:
-        raise ValueError("num_taps must be > 1.")
-    if decim <= 0:
-        raise ValueError("decim must be positive.")
-
-    prev_input = np.zeros((num_channels, num_taps - 1), dtype=np.float32)
-    phase = np.zeros(num_channels, dtype=np.int64)
-    return FIRDecimatorState(prev_input=prev_input, phase=phase)
 
 
 def design_kaiser_lowpass(
@@ -122,10 +79,9 @@ def design_kaiser_lowpass(
     h /= np.sum(h)
     return h.astype(np.float32)
 
-
 def fir_decimate_chunk_stateless(
     dsd_ext: np.ndarray,
-    taps: np.ndarray,
+    taps_reversed: np.ndarray,
     decim: int,
     global_start_index: int,  # 本体 main[0] のグローバルインデックス
     overlap: int,
@@ -147,8 +103,9 @@ def fir_decimate_chunk_stateless(
         オーバーラップサンプル数（通常 taps.size - 1）。
     """
     # 型とメモリレイアウトを Cython 側に合わせる
-    dsd_ext32 = np.ascontiguousarray(dsd_ext, dtype=np.float32)
-    taps32 = np.ascontiguousarray(taps, dtype=np.float32)
+    dsd_ext32 = dsd_ext
+    # print(dsd_ext32.dtype, dsd_ext32.flags, dsd_ext32.shape)
+    taps64 = taps_reversed
 
     num_samples, num_channels = dsd_ext32.shape
 
@@ -170,7 +127,7 @@ def fir_decimate_chunk_stateless(
     # Cython 実装を呼び出し
     pcm = fir_decimator.fir_decimate_chunk_core(
         dsd_ext32,
-        taps32,
+        taps64,
         int(decim),
         phase_init,
         int(overlap),
@@ -179,97 +136,3 @@ def fir_decimate_chunk_stateless(
 
     # _fir_decimate_chunk_core は float64 を返す実装にしている想定
     return pcm
-
-
-def process_dsd_in_chunks_stateless(
-    dsd_iter,
-    taps: np.ndarray,
-    decim: int,
-    chunk_dsd_samples: int,
-):
-    """DSD サンプル列をチャンク分割して stateless FIR+decimation で処理する例。
-
-    Parameters
-    ----------
-    dsd_iter:
-        2D ndarray (samples, ch) を順次 yield するイテレータ。
-        例: DsfReader(...).iter_blocks()
-    taps:
-        FIR 係数。
-    decim:
-        デシメーション係数。
-    chunk_dsd_samples:
-        1 チャンクあたりの「本体サンプル数」（DSD 側）。
-        例: DSD Fs=2.8224MHz で 0.5 秒ぶんなら ≒ 1,411,200 サンプル。
-
-    Yields
-    ------
-    pcm_block:
-        各チャンクに対応する PCM ブロック (2D ndarray) を順に yield。
-    """
-    L = len(taps)
-    overlap = L - 1
-
-    # 直前までの末尾 overlap サンプル
-    tail = None  # shape = (overlap, ch)
-
-    # ファイル全体に対するグローバル DSD インデックス
-    global_index = 0  # 次の main[0] のグローバルインデックス
-    tail = None
-    agg_blocks = []
-    agg_count = 0
-
-    for dsd_block in dsd_iter:
-        agg_blocks.append(dsd_block)
-        agg_count += dsd_block.shape[0]
-
-        while agg_count >= chunk_dsd_samples:
-            # チャンク本体
-            big = np.concatenate(agg_blocks, axis=0)
-            main = big[:chunk_dsd_samples, :]
-            rest = big[chunk_dsd_samples:, :]
-
-            agg_blocks = [rest] if rest.shape[0] > 0 else []
-            agg_count = rest.shape[0]
-
-            # オーバーラップ部分を用意
-            if tail is None:
-                ch = main.shape[1]
-                tail = np.zeros((overlap, ch), dtype=np.float32)
-
-            dsd_ext = np.concatenate([tail, main.astype(np.float32)], axis=0)
-
-            # ここで global_index は main[0] のグローバルインデックス
-            pcm_chunk = fir_decimate_chunk_stateless(
-                dsd_ext,
-                taps,
-                decim,
-                global_start_index=global_index,
-                overlap=overlap,
-            )
-            yield pcm_chunk
-
-            # 次のチャンク用に tail と global_index を更新
-            tail = main[-overlap:, :].astype(np.float32)
-            global_index += chunk_dsd_samples
-
-    # 余りがあれば最後のチャンクとして処理
-    if agg_count > 0:
-        big = np.concatenate(agg_blocks, axis=0)
-        main = big  # 全部本体にする
-
-        if tail is None:
-            ch = main.shape[1]
-            tail = np.zeros((overlap, ch), dtype=np.float32)
-
-        dsd_ext = np.concatenate([tail, main.astype(np.float32)], axis=0)
-        g_start = global_index
-
-        pcm_chunk = fir_decimate_chunk_stateless(
-            dsd_ext,
-            taps,
-            decim,
-            global_start_index=g_start,
-            overlap=overlap,
-        )
-        yield pcm_chunk

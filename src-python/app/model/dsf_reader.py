@@ -157,9 +157,10 @@ class DsfReader:
                 byte_arr = np.frombuffer(ch_bytes, dtype=np.uint8)
                 # DSF は BitsPerSample==1 のとき LSB-first で格納される
                 bits = np.unpackbits(byte_arr, bitorder="little")
-                bits = bits[:samples_in_block].astype(np.float32)
+                bits = bits[:samples_in_block]
                 # {0,1} -> {-1.0, +1.0}
-                dsd = np.float32(2.0) * bits - np.float32(1.0)
+                # dsd = np.float32(2.0) * bits - np.float32(1.0)
+                dsd = bits
                 dsd_channels.append(dsd)
 
             block = np.stack(dsd_channels, axis=1)  # (samples_in_block, channels)
